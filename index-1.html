@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><title>Admin Barang & Gaji</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#eaf6f1;--c:#fff;--t:#10262b;--m:#5b7378;--p:#15803d;--a:#1d4ed8;--b:#c9e0d8;--d:#c0392b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1a1f;--c:#12262d;--t:#e6f2ee;--m:#8fb0a8;--p:#16a34a;--a:#3b82f6;--b:#25404a;--d:#f0806f}}
+:root[data-theme="dark"]{--bg:#0b1a1f;--c:#12262d;--t:#e6f2ee;--m:#8fb0a8;--p:#16a34a;--a:#3b82f6;--b:#25404a;--d:#f0806f}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--t);font:15px system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:auto;padding:12px}
+.top{background:linear-gradient(90deg,var(--a),var(--p));color:#fff;padding:10px 12px;border-radius:10px}
+#login h1{color:var(--a)}
+h1{font-size:18px;margin:4px 0}
+.bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.tabs{display:flex;gap:6px;margin:10px 0}
+button{font:inherit;padding:8px 12px;border:1px solid var(--b);background:var(--c);color:var(--t);border-radius:8px;cursor:pointer}
+button.p{background:var(--p);color:#fff;border-color:var(--p)}button.on{background:var(--a);color:#fff;border-color:var(--a)}
+button.d{color:var(--d)}
+.card{background:var(--c);border:1px solid var(--b);border-top:3px solid var(--p);border-radius:10px;padding:12px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+label{font-size:12px;color:var(--m);display:block}
+input{width:100%;font:inherit;padding:8px;border:1px solid var(--b);border-radius:6px;background:var(--bg);color:var(--t)}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--b);text-align:left;white-space:nowrap}
+th{font-size:12px;color:var(--a)}.r{text-align:right}
+.row{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+#login{max-width:340px;margin:18vh auto;text-align:center}
+#struk{display:none}
+@media print{body>*{display:none!important}#struk{display:block!important;font:14px monospace;padding:20px;color:#000}}
+</style></head><body>
+<div id="login" class="card"><h1>Admin Barang & Penggajian</h1>
+<p style="color:var(--m)">Pilih cara masuk</p>
+<input id="pin" type="password" inputmode="numeric" placeholder="PIN Admin">
+<div class="row" style="justify-content:center"><button class="p" onclick="masuk('admin')">Masuk Admin</button><button onclick="masuk('viewer')">Anggota (lihat saja)</button></div>
+<p id="err" style="color:var(--d)"></p></div>
+<main id="app" hidden>
+<div class="bar top"><h1>Admin Barang & Penggajian</h1><div><span id="role" style="color:#fff"></span> <button onclick="location.reload()">Keluar</button></div></div>
+<div class="tabs" id="tabs"></div><div id="view"></div></main>
+<div id="struk"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const KEY='adm_gudang_v1',PIN='2003'; // ganti PIN di sini
+const F={ // urutan kolom sesuai catatan
+ masuk:['tanggal:Tanggal:date','toko:Nama Toko:text','kotak:Jumlah Kotak:number','kg:Total Kg:number','penerima:Penerima:text','ket:Keterangan:text'],
+ penerima:['tanggal:Tanggal:date','toko:Nama Toko:text','kotak:Jumlah Kotak:number','penerima:Penerima:text','kg:Total Kg:number','ket:Keterangan:text']};
+const NAMA={masuk:'Barang Masuk',penerima:'Barang Keluar / Penerima',rekap:'Rekap Gaji'};
+let db={masuk:[],penerima:[],tarif:0},tab='masuk',admin=false,edit=null;
+try{db=Object.assign(db,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}};
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const rp=n=>'Rp '+Math.round(n).toLocaleString('id-ID'),kg=n=>(+n||0).toLocaleString('id-ID',{maximumFractionDigits:2});
+function masuk(r){if(r==='admin'&&$('pin').value!==PIN){$('err').textContent='PIN salah';return}
+ admin=r==='admin';$('login').hidden=true;$('app').hidden=false;$('role').textContent=admin?'Admin':'Anggota (lihat saja)';draw()}
+function draw(){$('tabs').innerHTML=Object.keys(NAMA).map(k=>`<button class="${k===tab?'on':''}" onclick="tab='${k}';edit=null;draw()">${NAMA[k]}</button>`).join('');
+ $('view').innerHTML=tab==='rekap'?rekapHTML():dataHTML()}
+function dataHTML(){const f=F[tab].map(x=>x.split(':')),rows=db[tab];
+ const form=admin?`<div class="card"><b>${edit===null?'Tambah':'Edit'} data</b><div class="grid" style="margin-top:8px">${f.map(([k,l,t])=>`<div><label>${l}</label><input id="f_${k}" type="${t}" ${t==='number'?'step="any" inputmode="decimal"':''} value="${esc(edit!==null?rows[edit][k]:(k==='tanggal'?new Date().toISOString().slice(0,10):''))}"></div>`).join('')}</div>
+ <div class="row"><button class="p" onclick="simpan()">Simpan</button>${edit!==null?'<button onclick="edit=null;draw()">Batal</button>':''}</div></div>`:'';
+ const tot=rows.reduce((a,r)=>a+(+r.kg||0),0);
+ return form+`<div class="card"><div class="bar"><b>${NAMA[tab]} (${rows.length}) · Total ${kg(tot)} kg</b><button onclick="xl('${tab}')">Ekspor Excel</button></div>
+ <div class="wrap"><table><tr><th>#</th>${f.map(x=>`<th>${x[1]}</th>`).join('')}${admin?'<th></th>':''}</tr>
+ ${rows.map((r,i)=>`<tr><td>${i+1}</td>${f.map(([k,,t])=>`<td class="${t==='number'?'r':''}">${esc(r[k])}</td>`).join('')}${admin?`<td><button onclick="edit=${i};draw();scrollTo(0,0)">Edit</button> <button class="d" onclick="hapus(${i})">Hapus</button></td>`:''}</tr>`).join('')||'<tr><td colspan="9">Belum ada data</td></tr>'}</table></div></div>`}
+function simpan(){const o={};F[tab].forEach(x=>{const k=x.split(':')[0];o[k]=$('f_'+k).value.trim()});
+ if(!o.tanggal||!o.toko){alert('Tanggal dan nama toko wajib diisi');return}
+ ['kotak','kg'].forEach(k=>o[k]=+o[k]||0);
+ edit===null?db[tab].push(o):db[tab][edit]=o;edit=null;save();draw()}
+function hapus(i){if(confirm('Hapus data ini?')){db[tab].splice(i,1);edit=null;save();draw()}}
+let dari='',sampai='';
+function rekap(){const inR=r=>(!dari||r.tanggal>=dari)&&(!sampai||r.tanggal<=sampai),tr=+db.tarif||0;
+ const g=(rows,f)=>{const m={};rows.filter(inR).forEach(r=>{const n=String(r[f]||'-').trim()||'-',k=n.toLowerCase();m[k]=m[k]||{nama:n,kg:0};m[k].kg+=+r.kg||0});return Object.values(m).sort((x,y)=>x.nama.localeCompare(y.nama)).map(x=>({nama:x.nama,kg:Math.round(x.kg*100)/100,gaji:x.kg*tr}))};
+ return{toko:g(db.masuk,'toko'),pen:g(db.penerima,'penerima')}}
+function rekapHTML(){const R=rekap(),t=(a,h,s)=>`<div class="wrap"><table><tr><th>${h}</th><th class="r">Total Kg</th><th class="r">Jumlah Gaji</th>${s?'<th></th>':''}</tr>${a.map((r,i)=>`<tr><td>${esc(r.nama)}</td><td class="r">${kg(r.kg)}</td><td class="r">${rp(r.gaji)}</td>${s?`<td><button onclick="struk(${i})">Cetak Struk</button></td>`:''}</tr>`).join('')||'<tr><td colspan="4">Belum ada data</td></tr>'}</table></div>`;
+ return `<div class="card"><div class="grid"><div><label>Dari tanggal</label><input type="date" id="dr" value="${dari}" onchange="dari=this.value;draw()"></div><div><label>Sampai tanggal</label><input type="date" id="sp" value="${sampai}" onchange="sampai=this.value;draw()"></div>
+ <div><label>Tarif per kg (Rp)</label><input type="number" inputmode="decimal" value="${db.tarif||''}" ${admin?'':'disabled'} onchange="db.tarif=+this.value;save();draw()"></div></div>
+ <div class="row"><button onclick="xl('rekap')">Ekspor Excel</button></div></div>
+ <div class="card"><b>Per Toko (dari Barang Masuk)</b>${t(R.toko,'Nama Toko')}</div>
+ <div class="card"><b>Per Penerima / Agen (dari Barang Keluar)</b>${t(R.pen,'Nama Penerima',1)}</div>`}
+function struk(i){const r=rekap().pen[i];if(!r)return;const n=r.nama;
+ $('struk').innerHTML=`<h3>STRUK GAJI</h3>Penerima : ${esc(n)}<br>Periode  : ${dari||'awal'} s/d ${sampai||'sekarang'}<br>Total Kg : ${kg(r.kg)}<br>Tarif/kg : ${rp(db.tarif)}<hr><b>GAJI : ${rp(r.gaji)}</b><br><br>Dicetak: ${new Date().toLocaleDateString('id-ID')}`;window.print()}
+async function xl(k){const wb=XLSX.utils.book_new(),add=(n,rows)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),n);
+ if(k==='rekap'){const R=rekap();add('Per Toko',R.toko.map(r=>({'Nama Toko':r.nama,'Total Kg':r.kg,'Jumlah Gaji':r.gaji})));add('Per Penerima',R.pen.map(r=>({'Nama Penerima':r.nama,'Total Kg':r.kg,'Jumlah Gaji':r.gaji})))}
+ else add(NAMA[k].slice(0,30).replace(/[\/\\?*\[\]:]/g,'-'),db[k].map(r=>Object.fromEntries(F[k].map(x=>{const p=x.split(':');return[p[1],r[p[0]]]}))));
+ XLSX.writeFile(wb,`${k}-${new Date().toISOString().slice(0,10)}.xlsx`)}
+$('pin').addEventListener('keydown',e=>{if(e.key==='Enter')masuk('admin')});
+</script></body></html>
